@@ -31,16 +31,13 @@ enum auth_error
 };
 
 static void		auth_fixpath(char *path);
-static nfs_export*	auth_authenticate_internal
-  (char *what, struct sockaddr_in *caller, char *path,
-   struct hostent **hpp, enum auth_error *error);
-static char	*export_file = NULL;
+
+extern int new_cache;
 
 void
 auth_init(char *exports)
 {
 
-	export_file = exports;
 	auth_reload();
 	xtab_mount_write();
 }
@@ -58,7 +55,6 @@ auth_reload()
 	last_modified = stb.st_mtime;
 
 	export_freeall();
-	// export_read(export_file);
 	xtab_export_read();
 
 	return 1;
@@ -66,71 +62,67 @@ auth_reload()
 
 static nfs_export *
 auth_authenticate_internal(char *what, struct sockaddr_in *caller,
-			   char *path, struct hostent **hpp,
+			   char *path, struct hostent *hp,
 			   enum auth_error *error)
 {
 	struct in_addr		addr = caller->sin_addr;
 	nfs_export		*exp;
 
-	if (path[0] != '/') {
-		*error = bad_path;
-		return NULL;
-	}
-	auth_fixpath(path);
+	static nfs_export my_exp;
+	static nfs_client my_client;
 
-	if (!(*hpp = gethostbyaddr((const char *)&addr, sizeof(addr), AF_INET)))
-		*hpp = get_hostent((const char *)&addr, sizeof(addr),
-				   AF_INET);
-	else {
-		/* must make sure the hostent is authorative. */
-		char **sp;
-		struct hostent *forward = NULL;
-		char *tmpname;
-
-		*hpp = hostent_dup (*hpp);
-		tmpname = xstrdup((*hpp)->h_name);
-		if (tmpname) {
-			forward = gethostbyname(tmpname);
-			free(tmpname);
-		}
-		if (forward) {
-			/* now make sure the "addr" is in the list */
-			for (sp = forward->h_addr_list ; *sp ; sp++) {
-				if (memcmp(*sp, &addr, forward->h_length)==0)
-					break;
-			}
-		
-			if (!*sp) {
-				/* it was a FAKE */
-				*error = faked_hostent;
+	if (new_cache) {
+		int i;
+		/* return static nfs_export with details filled in */
+		if (my_client.m_naddr != 1 ||
+		    my_client.m_addrlist[0].s_addr != caller->sin_addr.s_addr) {
+			char *n;
+			my_client.m_naddr = 0;
+			my_client.m_addrlist[0] = caller->sin_addr;
+			n = client_compose(addr);
+			if (!n)
 				return NULL;
-			}
-			free (*hpp);
-			*hpp = hostent_dup (forward);
+			strcpy(my_client.m_hostname, *n?n:"DEFAULT");
+			free(n);
+			my_client.m_naddr = 1;
 		}
-		else {
-			/* never heard of it. misconfigured DNS? */
-			*error = no_forward_dns;
+
+		my_exp.m_client = &my_client;
+
+		exp = NULL;
+		for (i = 0; !exp && i < MCL_MAXTYPES; i++) 
+			for (exp = exportlist[i]; exp; exp = exp->m_next) {
+				if (!client_member(my_client.m_hostname, exp->m_client->m_hostname))
+					continue;
+				if (strcmp(path, exp->m_export.e_path))
+					continue;
+				break;
+			}
+		*error = not_exported;
+		if (!exp)
+			return exp;
+
+		my_exp.m_export = exp->m_export;
+		exp = &my_exp;
+	} else {
+
+		if (!(exp = export_find(hp, path))) {
+			*error = no_entry;
 			return NULL;
 		}
-	}
+		if (!exp->m_mayexport) {
+			*error = not_exported;
+			return NULL;
+		}
 
-	if (!(exp = export_find(*hpp, path))) {
-		*error = no_entry;
-		return NULL;
-	}
-	if (!exp->m_mayexport) {
-		*error = not_exported;
-		return NULL;
-	}
+		if (!(exp->m_export.e_flags & NFSEXP_INSECURE_PORT) &&
+		    (ntohs(caller->sin_port) <  IPPORT_RESERVED/2 ||
+		     ntohs(caller->sin_port) >= IPPORT_RESERVED)) {
+			*error = illegal_port;
+			return NULL;
+		}
 
-	if (!(exp->m_export.e_flags & NFSEXP_INSECURE_PORT) &&
-	    (ntohs(caller->sin_port) <  IPPORT_RESERVED/2 ||
-	     ntohs(caller->sin_port) >= IPPORT_RESERVED)) {
-		*error = illegal_port;
-		return NULL;
 	}
-
 	*error = success;
 
 	return exp;
@@ -154,15 +146,19 @@ auth_authenticate(char *what, struct sockaddr_in *caller, char *path)
 
 	strncpy(epath, path, sizeof (epath) - 1);
 	epath[sizeof (epath) - 1] = '\0';
+	auth_fixpath(epath);/* strip dup '/' etc */
 
+	hp = get_reliable_hostbyaddr((const char*)&caller->sin_addr, sizeof(struct in_addr),
+				     AF_INET);
+	if (!hp)
+		hp = get_hostent((const char*)&caller->sin_addr, sizeof(struct in_addr),
+				     AF_INET);
+	if (!hp)
+		return exp;
 	/* Try the longest matching exported pathname. */
 	while (1) {
-		if (hp) {
-			free (hp);
-			hp = NULL;
-		}
 		exp = auth_authenticate_internal(what, caller, epath,
-						 &hp, &error);
+						 hp, &error);
 		if (exp || (error != not_exported && error != no_entry))
 			break;
 		/* We have to treat the root, "/", specially. */
@@ -171,6 +167,7 @@ auth_authenticate(char *what, struct sockaddr_in *caller, char *path)
 		if (p == epath) p++;
 		*p = '\0';
 	}
+	free(hp);
 
 	switch (error) {
 	case bad_path:
@@ -223,6 +220,9 @@ auth_authenticate(char *what, struct sockaddr_in *caller, char *path)
 	return exp;
 }
 
+/*
+ * Remove duplicate and trailing '/' (Except for leading slash)
+ */
 static void
 auth_fixpath(char *path)
 {
