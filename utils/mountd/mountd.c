@@ -26,6 +26,7 @@
 #include "misc.h"
 #include "mountd.h"
 #include "rpcmisc.h"
+#include "v4root.h"
 
 extern void	cache_open(void);
 extern struct nfs_fh_len *cache_get_filehandle(nfs_export *exp, int len, char *p);
@@ -71,6 +72,7 @@ static struct option longopts[] =
 	{ "num-threads", 1, 0, 't' },
 	{ "reverse-lookup", 0, 0, 'r' },
 	{ "manage-gids", 0, 0, 'g' },
+	{ "v4-root", 0, 0, 'R' },
 	{ NULL, 0, 0, 0 }
 };
 
@@ -169,6 +171,7 @@ killer (int sig)
 		kill(0, SIGTERM);
 		wait_for_workers();
 	}
+	v4root_umountall();
 	xlog (L_FATAL, "Caught signal %d, un-registering and exiting.", sig);
 }
 
@@ -568,7 +571,7 @@ main(int argc, char **argv)
 
 	/* Parse the command line options and arguments. */
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "o:nFd:f:p:P:hH:N:V:vrs:t:g", longopts, NULL)) != EOF)
+	while ((c = getopt_long(argc, argv, "o:nFd:f:p:P:hH:N:V:vRrs:t:g", longopts, NULL)) != EOF)
 		switch (c) {
 		case 'g':
 			manage_gids = 1;
@@ -610,6 +613,9 @@ main(int argc, char **argv)
 			break;
 		case 'n':
 			_rpcfdtype = SOCK_DGRAM;
+			break;
+		case 'R':
+			v4root_check = 1;
 			break;
 		case 'r':
 			reverse_resolve = 1;

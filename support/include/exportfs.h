@@ -12,6 +12,17 @@
 #include <netdb.h>
 #include "nfslib.h"
 
+enum nfsd_fsid {
+	FSID_DEV = 0,
+	FSID_NUM,
+	FSID_MAJOR_MINOR,
+	FSID_ENCODE_DEV,
+	FSID_UUID4_INUM,
+	FSID_UUID8,
+	FSID_UUID16,
+	FSID_UUID16_INUM,
+};
+
 enum {
 	MCL_FQDN = 0,
 	MCL_SUBNETWORK,

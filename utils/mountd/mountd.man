@@ -125,6 +125,14 @@ If this option is not specified the default of
 .BR /var/lib/nfs
 is used.
 .TP
+.BI "\-R," "" " \-\-v4\-root"
+Dynamically creates and manages an disk a pseudo root allowing NFS 
+version 4 mounts to work seamlessly with existing exports configurations.
+Without this option, the pseudo root must be static defined
+with an export containing the 'fsid=0' options. See exports(5).
+.BR Note:
+the option is ignored when the pseudo root is statically defined.
+.TP
 .BI "\-r," "" " \-\-reverse\-lookup"
 mountd tracks IP addresses in the rmtab, and when a DUMP request is made (by
 someone running showmount -a, for instance), it returns IP addresses instead

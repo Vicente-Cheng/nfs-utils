@@ -36,18 +36,6 @@
 #include "blkid/blkid.h"
 #endif
 
-
-enum nfsd_fsid {
-	FSID_DEV = 0,
-	FSID_NUM,
-	FSID_MAJOR_MINOR,
-	FSID_ENCODE_DEV,
-	FSID_UUID4_INUM,
-	FSID_UUID8,
-	FSID_UUID16,
-	FSID_UUID16_INUM,
-};
-
 /*
  * Support routines for text-based upcalls.
  * Fields are separated by spaces.
@@ -57,7 +45,6 @@ enum nfsd_fsid {
  *
  */
 int cache_export_ent(char *domain, struct exportent *exp, char *p);
-
 
 char *lbuf  = NULL;
 int lbuflen = 0;
@@ -133,6 +120,8 @@ void auth_unix_gid(FILE *f)
 
 	if (readline(fileno(f), &lbuf, &lbuflen) != 1)
 		return;
+
+	xlog(D_CALL, "auth_unix_gid: '%s'", lbuf);
 
 	cp = lbuf;
 	if (qword_get_int(&cp, &uid) != 0)
@@ -370,6 +359,10 @@ void nfsd_fh(FILE *f)
 
 	auth_reload();
 
+	if ((found = v4root_chkroot(fsidtype, fsidnum, fhuuid))) {
+		found_path = strdup(found->e_path);
+		goto found;
+	}
 	/* Now determine export point for this fsid/domain */
 	for (i=0 ; i < MCL_MAXTYPES; i++) {
 		nfs_export *next_exp;
@@ -495,7 +488,7 @@ void nfsd_fh(FILE *f)
 		 */
 		goto out;
 	}
-
+found:
 	if (found)
 		if (cache_export_ent(dom, found, found_path) < 0)
 			found = 0;
@@ -574,8 +567,9 @@ static int dump_to_cache(FILE *f, char *domain, char *path, struct exportent *ex
 	qword_printint(f, time(0)+30*60);
 	if (exp) {
 		int different_fs = strcmp(path, exp->e_path) != 0;
+		int v4root = (v4root_maproot(path) != NULL);
 		
-		if (different_fs)
+		if (different_fs && !v4root)
 			qword_printint(f, exp->e_flags & ~NFSEXP_FSID);
 		else
 			qword_printint(f, exp->e_flags);
@@ -610,7 +604,7 @@ void nfsd_export(FILE *f)
 
 	char *cp;
 	int i;
-	char *dom, *path;
+	char *dom, *path, *mpath, *mroot=NULL;
 	nfs_export *exp, *found = NULL;
 	int found_type = 0;
 	struct in_addr addr;
@@ -636,6 +630,18 @@ void nfsd_export(FILE *f)
 
 	auth_reload();
 
+	 /*
+	  * See if path needs to be mapped in to the pseudo root
+	  */
+	mpath = NULL;
+	if ((mroot = v4root_maproot(path))){
+		/* If its the actual pseudo root, no need to search the table */
+		if ((found = v4root_export(path)))
+			goto found;
+		mpath = mroot;
+	} else
+		mpath = path;
+		
 	/* now find flags for this export point in this domain */
 	for (i=0 ; i < MCL_MAXTYPES; i++) {
 		for (exp = exportlist[i]; exp; exp = exp->m_next) {
@@ -644,15 +650,16 @@ void nfsd_export(FILE *f)
 			if (exp->m_export.e_flags & NFSEXP_CROSSMOUNT) {
 				/* if path is a mountpoint below e_path, then OK */
 				int l = strlen(exp->m_export.e_path);
-				if (strcmp(path, exp->m_export.e_path) == 0 ||
-				    (strncmp(path, exp->m_export.e_path, l) == 0 &&
-				     path[l] == '/' &&
-				     is_mountpoint(path)))
+				if (strcmp(mpath, exp->m_export.e_path) == 0 ||
+				    (strncmp(mpath, exp->m_export.e_path, l) == 0 &&
+				     mpath[l] == '/' &&
+				     is_mountpoint(mpath)))
 					/* ok */;
 				else
 					continue;
-			} else if (strcmp(path, exp->m_export.e_path) != 0)
+			} else if (strcmp(mpath, exp->m_export.e_path) != 0)
 				continue;
+
 			if (use_ipaddr) {
 				if (he == NULL) {
 					if (!inet_aton(dom, &addr))
@@ -683,13 +690,13 @@ void nfsd_export(FILE *f)
 			} else if (found_type == i && found->m_warned == 0) {
 				xlog(L_WARNING, "%s exported to both %s and %s, "
 				     "arbitrarily choosing options from first",
-				     path, found->m_client->m_hostname, exp->m_client->m_hostname,
+				     mpath, found->m_client->m_hostname, exp->m_client->m_hostname,
 				     dom);
 				found->m_warned = 1;
 			}
 		}
 	}
-
+found:
 	if (found) {
 		if (dump_to_cache(f, dom, path, &found->m_export) < 0) {
 			xlog(L_WARNING,
@@ -704,6 +711,7 @@ void nfsd_export(FILE *f)
 	xlog(D_CALL, "nfsd_export: found %p path %s", found, path ? path : NULL);
 	if (dom) free(dom);
 	if (path) free(path);
+	if (mroot) free(mroot);
 	if (he) free(he);
 }
 

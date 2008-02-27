@@ -21,6 +21,7 @@
 #include "mountd.h"
 #include "xmalloc.h"
 
+
 enum auth_error
 {
   bad_path,
@@ -84,6 +85,7 @@ auth_reload()
 	static int		last_fd;
 	static unsigned int	counter;
 	int			fd;
+	extern void v4root_destroy(), v4root_create();
 
 	if ((fd = open(_PATH_ETAB, O_RDONLY)) < 0) {
 		xlog(L_FATAL, "couldn't open %s", _PATH_ETAB);
@@ -98,9 +100,12 @@ auth_reload()
 		last_inode = stb.st_ino;
 	}
 
+
+	v4root_destroy();
 	export_freeall();
 	memset(&my_client, 0, sizeof(my_client));
 	xtab_export_read();
+	v4root_create();
 	check_useipaddr();
 	++counter;
 
