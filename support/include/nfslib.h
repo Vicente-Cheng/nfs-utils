@@ -155,4 +155,7 @@ void closeall(int min);
 int			svctcp_socket (u_long __number, int __reuse);
 int			svcudp_socket (u_long __number, int __reuse);
 
+extern int execute_cmd(const char *cmd,  char *const myargv[]);
+extern void syserror(char *message);
+
 #endif /* NFSLIB_H */
