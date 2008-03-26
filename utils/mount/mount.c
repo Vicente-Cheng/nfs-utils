@@ -18,7 +18,10 @@
  *
  */
 
-#include "config.h"
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <stdio.h>
@@ -136,6 +139,10 @@ static const struct opt_map opt_map[] = {
   { "norelatime", 0, 1, MS_RELATIME }, /* Update access time without regard
                       to mtime/ctime */
 #endif
+  { "noquota", 0, 0, MS_DUMMY },        /* Don't enforce quota */
+  { "quota", 0, 0, MS_DUMMY },          /* Enforce user quota */
+  { "usrquota", 0, 0, MS_DUMMY },       /* Enforce user quota */
+  { "grpquota", 0, 0, MS_DUMMY },       /* Enforce group quota */
   { NULL,	0, 0, 0		}
 };
 

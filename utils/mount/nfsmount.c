@@ -35,6 +35,10 @@
  * nfsmount.c,v 1.1.1.1 1993/11/18 08:40:51 jrs Exp
  */
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <ctype.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -714,7 +718,7 @@ nfsmount(const char *spec, const char *node, int flags,
 			rpc_mount_errors(*nfs_server.hostname, 1, bg);
 	}
 
-	if (nfs_pmap->pm_vers == 2) {
+	if (mnt_pmap->pm_vers <= 2) {
 		if (mntres.nfsv2.fhs_status != 0) {
 			nfs_error(_("%s: %s:%s failed, reason given by server: %s"),
 					progname, hostname, dirname,
@@ -734,7 +738,7 @@ nfsmount(const char *spec, const char *node, int flags,
 #if NFS_MOUNT_VERSION >= 4
 		mountres3_ok *mountres;
 		fhandle3 *fhandle;
-		int i, *flavor, yum = 0;
+		int i,  n_flavors, *flavor, yum = 0;
 		if (mntres.nfsv3.fhs_status != 0) {
 			nfs_error(_("%s: %s:%s failed, reason given by server: %s"),
 					progname, hostname, dirname,
@@ -743,13 +747,16 @@ nfsmount(const char *spec, const char *node, int flags,
 		}
 #if NFS_MOUNT_VERSION >= 5
 		mountres = &mntres.nfsv3.mountres3_u.mountinfo;
-		i = mountres->auth_flavors.auth_flavors_len;
-		if (i <= 0)
+		n_flavors = mountres->auth_flavors.auth_flavors_len;
+		if (n_flavors <= 0)
 			goto noauth_flavors;
 
 		flavor = mountres->auth_flavors.auth_flavors_val;
-		while (--i >= 0) {
-			/* If no flavour requested, use first simple
+		for (i = 0; i < n_flavors; ++i) {
+			/*
+			 * Per RFC2623, section 2.7, we should prefer the
+			 * flavour listed first.
+			 * If no flavour requested, use the first simple
 			 * flavour that is offered.
 			 */
 			if (! (data.flags & NFS_MOUNT_SECFLAVOUR) &&
