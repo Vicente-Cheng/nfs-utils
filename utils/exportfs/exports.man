@@ -390,7 +390,10 @@ is sufficient.)
 If the client asks for alternative locations for the export point, it
 will be given this list of alternatives. (Note that actual replication
 of the filesystem must be handled elsewhere.)
-
+.TP
+.IR pnfs
+Make a file system available to a Parallel NFS (pNFS)
+client.
 .SS User ID Mapping
 .PP
 .B nfsd
