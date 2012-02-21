@@ -329,7 +329,9 @@ is off).
 .\".TP
 .\".IR link_absolute
 .\"Leave all symbolic link as they are. This is the default operation.
-
+.TP
+.IR lnfs
+This option enables labeled NFS support on the export.
 .TP
 .IR mountpoint= path
 .TP

@@ -621,6 +621,8 @@ dump(int verbose)
 				c = dumpopt(c, "async");
 			if (ep->e_flags & NFSEXP_GATHERED_WRITES)
 				c = dumpopt(c, "wdelay");
+			if (ep->e_flags & NFSEXP_SECURITY_LABEL)
+				c = dumpopt(c, "security_label");
 			if (ep->e_flags & NFSEXP_NOHIDE)
 				c = dumpopt(c, "nohide");
 			if (ep->e_flags & NFSEXP_CROSSMOUNT)

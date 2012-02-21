@@ -245,6 +245,8 @@ putexportent(struct exportent *ep)
 	fprintf(fp, "%ssync,", (ep->e_flags & NFSEXP_ASYNC)? "a" : "");
 	fprintf(fp, "%swdelay,", (ep->e_flags & NFSEXP_GATHERED_WRITES)?
 				"" : "no_");
+	fprintf(fp, "%ssecurity_label,", (ep->e_flags & NFSEXP_SECURITY_LABEL)?
+			"" : "no");
 	fprintf(fp, "%shide,", (ep->e_flags & NFSEXP_NOHIDE)?
 				"no" : "");
 	fprintf(fp, "%scrossmnt,", (ep->e_flags & NFSEXP_CROSSMOUNT)?
@@ -539,6 +541,10 @@ parseopts(char *cp, struct exportent *ep, int warn, int *had_subtree_opt_ptr)
 			setflags(NFSEXP_GATHERED_WRITES, active, ep);
 		else if (!strcmp(opt, "no_wdelay"))
 			clearflags(NFSEXP_GATHERED_WRITES, active, ep);
+		else if (strcmp(opt, "security_label") == 0)
+			ep->e_flags |= NFSEXP_SECURITY_LABEL;
+		else if (strcmp(opt, "nosecurity_label") == 0)
+			ep->e_flags &= ~NFSEXP_SECURITY_LABEL;
 		else if (strcmp(opt, "root_squash") == 0)
 			setflags(NFSEXP_ROOTSQUASH, active, ep);
 		else if (!strcmp(opt, "no_root_squash"))
