@@ -365,16 +365,30 @@ static void
 gssd_clnt_gssd_cb(int UNUSED(fd), short UNUSED(which), void *data)
 {
 	struct clnt_info *clp = data;
+	pthread_t th;
+	int ret; 
 
-	handle_gssd_upcall(clp);
+	ret = pthread_create(&th, NULL, (void *)handle_gssd_upcall, (void *)clp);
+	if (ret != 0) {
+		printerr(0, "pthread_create failed: ret %d: %s\n", ret, strerror(errno)); 
+		return;
+	}
+	pthread_join(th, NULL);
 }
 
 static void
 gssd_clnt_krb5_cb(int UNUSED(fd), short UNUSED(which), void *data)
 {
 	struct clnt_info *clp = data;
+	pthread_t th;
+	int ret; 
 
-	handle_krb5_upcall(clp);
+	ret = pthread_create(&th, NULL, (void *)handle_krb5_upcall, (void *)clp);
+	if (ret != 0) {
+		printerr(0, "pthread_create failed: ret %d: %s\n", ret, strerror(errno)); 
+	}
+
+	pthread_join(th, NULL);
 }
 
 static struct clnt_info *

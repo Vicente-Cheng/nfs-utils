@@ -629,36 +629,6 @@ process_krb5_upcall(struct clnt_info *clp, uid_t uid, int fd, char *tgtname,
 	if (uid != 0 || (uid == 0 && root_uses_machine_creds == 0 &&
 				service == NULL)) {
 
-		/* already running as uid 0 */
-		if (uid == 0)
-			goto no_fork;
-
-		pid = fork();
-		switch(pid) {
-		case 0:
-			/* Child: fall through to rest of function */
-			childpid = getpid();
-			unsetenv("KRB5CCNAME");
-			printerr(2, "CHILD forked pid %d \n", childpid);
-			break;
-		case -1:
-			/* fork() failed! */
-			printerr(0, "WARNING: unable to fork() to handle"
-				"upcall: %s\n", strerror(errno));
-			return;
-		default:
-			/* Parent: just wait on child to exit and return */
-			do {
-				pid = wait(&err);
-			} while(pid == -1 && errno != -ECHILD);
-
-			if (WIFSIGNALED(err))
-				printerr(0, "WARNING: forked child was killed"
-					 "with signal %d\n", WTERMSIG(err));
-			return;
-		}
-no_fork:
-
 		auth = krb5_not_machine_creds(clp, uid, tgtname, &downcall_err,
 						&err, &rpc_clnt);
 		if (err)
