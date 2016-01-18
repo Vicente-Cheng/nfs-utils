@@ -362,8 +362,81 @@ gssd_destroy_client(struct clnt_info *clp)
 
 static void gssd_scan(void);
 
-#define JOIN_TIMOUT 1
+static inline void gssd_sig_hold(int sig, sigset_t *mask)
+{
+	sigemptyset(mask);
+	sigaddset(mask, sig);
+	pthread_sigmask(SIG_BLOCK, mask, NULL);
+}
+static inline void gssd_sig_rel(sigset_t *mask)
+{
+	pthread_sigmask(SIG_UNBLOCK, mask, NULL);
+}
 
+#define JOIN_TIMOUT 1
+#define JOIN_ALARM 5
+
+#define TH_TBL_SZ 50
+TAILQ_HEAD(thread_list_head, threads) thread_list;
+struct threads {
+	TAILQ_ENTRY(threads) list;
+	pthread_t th;
+};
+struct threads th_tbl[TH_TBL_SZ];
+static inline void th_tbl_init(void);
+
+static inline void th_tbl_init()
+{
+	int i;
+	for (i = 0; i < TH_TBL_SZ; i++)
+		th_tbl[i].th = 0;
+}
+
+static void
+th_tbl_alarm(int signal)
+{
+	struct threads *thp;
+	int setalarm = 0;
+
+	printerr(2, "th_tbl_alarm signal %d\n", signal);
+
+	TAILQ_FOREACH(thp, &thread_list, list) {
+		if (pthread_tryjoin_np(thp->th, NULL) == 0) {
+			printerr(2, "th_tbl_alarm found 0x%x\n", thp->th);
+			thp->th = 0;
+		} else
+			setalarm++;
+	}
+	if (setalarm)
+		alarm(JOIN_ALARM);
+		
+}
+
+static int th_tbl_insert(pthread_t th)
+{
+	int i;
+	int status = 0;
+	sigset_t mask;
+
+	/* hold off any pending alarms */
+	gssd_sig_hold(SIGALRM, &mask);
+
+	for (i=0; i < TH_TBL_SZ; i++) {
+		if (th_tbl[i].th == 0) { /* free slot */
+			th_tbl[i].th = th;
+			TAILQ_INSERT_HEAD(&thread_list, &th_tbl[i], list);
+			status = 1;
+			printerr(2, "th_tbl_alarm set 0x%x\n", th);
+			break;
+		}
+	}
+	gssd_sig_rel(&mask);
+
+	if (status)
+		alarm(JOIN_ALARM);
+
+	return status;
+}
 /*
  * Try to join a terminated thread after a short wait.
  * If successful return 0 otherwise return 1 which 
@@ -381,6 +454,9 @@ static int gssd_try_join(pthread_t th)
 	if (pthread_timedjoin_np(th, NULL,  &ts) == 0)
 		return 0;
 
+	if (th_tbl_insert(th))
+		return 0;
+
 	printerr(2, "gssd_try_join: no join\n");
 	return 1;
 }
@@ -396,6 +472,7 @@ gssd_clnt_gssd_cb(int UNUSED(fd), short UNUSED(which), void *data)
 		printerr(0, "pthread_create failed: ret %d: %s\n", ret, strerror(errno)); 
 		return;
 	}
+
 	if (gssd_try_join(th))
 		pthread_join(th, NULL);
 }
@@ -946,12 +1023,16 @@ main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
+	signal(SIGALRM, th_tbl_alarm);
 	signal(SIGINT, sig_die);
 	signal(SIGTERM, sig_die);
 	signal_set(&sighup_ev, SIGHUP, gssd_scan_cb, NULL);
 	signal_add(&sighup_ev, NULL);
 	event_set(&inotify_ev, inotify_fd, EV_READ | EV_PERSIST, gssd_inotify_cb, NULL);
 	event_add(&inotify_ev, NULL);
+
+	th_tbl_init();
+	TAILQ_INIT(&thread_list);
 
 	TAILQ_INIT(&topdir_list);
 	gssd_scan();
