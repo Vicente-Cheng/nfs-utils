@@ -65,6 +65,7 @@
 #include <dirent.h>
 #include <netdb.h>
 #include <event.h>
+#include <time.h>
 
 #include "gssd.h"
 #include "err_util.h"
@@ -361,6 +362,28 @@ gssd_destroy_client(struct clnt_info *clp)
 
 static void gssd_scan(void);
 
+#define JOIN_TIMOUT 1
+
+/*
+ * Try to join a terminated thread after a short wait.
+ * If successful return 0 otherwise return 1 which 
+ * tells the caller it should do the join. 
+ */
+static int gssd_try_join(pthread_t th)
+{
+	struct timespec ts;
+
+	if (clock_gettime(CLOCK_REALTIME, &ts) < 0) {
+		printerr(1, "clock_gettime failed: %s\n", strerror(errno));
+		return 1;
+	}
+	ts.tv_sec += JOIN_TIMOUT;
+	if (pthread_timedjoin_np(th, NULL,  &ts) == 0)
+		return 0;
+
+	printerr(2, "gssd_try_join: no join\n");
+	return 1;
+}
 static void
 gssd_clnt_gssd_cb(int UNUSED(fd), short UNUSED(which), void *data)
 {
@@ -373,7 +396,8 @@ gssd_clnt_gssd_cb(int UNUSED(fd), short UNUSED(which), void *data)
 		printerr(0, "pthread_create failed: ret %d: %s\n", ret, strerror(errno)); 
 		return;
 	}
-	pthread_join(th, NULL);
+	if (gssd_try_join(th))
+		pthread_join(th, NULL);
 }
 
 static void
@@ -388,7 +412,8 @@ gssd_clnt_krb5_cb(int UNUSED(fd), short UNUSED(which), void *data)
 		printerr(0, "pthread_create failed: ret %d: %s\n", ret, strerror(errno)); 
 	}
 
-	pthread_join(th, NULL);
+	if (gssd_try_join(th))
+		pthread_join(th, NULL);
 }
 
 static struct clnt_info *
