@@ -60,7 +60,8 @@ xstrconcat3 (const char *s, const char *t, const char *u) {
      strcpy(res, s);
      strcat(res, t);
      strcat(res, u);
-     free((void *) s);
+	 if (s != "")
+     	free((void *) s);
      return res;
 }
 
@@ -78,7 +79,8 @@ xstrconcat4 (const char *s, const char *t, const char *u, const char *v) {
      strcat(res, t);
      strcat(res, u);
      strcat(res, v);
-     free((void *) s);
+	 if (s != "")
+     	free((void *) s);
      return res;
 }
 
