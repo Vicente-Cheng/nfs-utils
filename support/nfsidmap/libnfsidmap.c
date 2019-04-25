@@ -406,8 +406,10 @@ int nfs4_init_name_mapping(char *conffile)
 	nfs4_methods = conf_get_list("Translation", "Method");
 	if (nfs4_methods) {
 		IDMAP_LOG(1, ("libnfsidmap: processing 'Method' list"));
-		if (load_plugins(nfs4_methods, &nfs4_plugins) == -1)
+		if (load_plugins(nfs4_methods, &nfs4_plugins) == -1) {
+			conf_free_list(nfs4_methods);
 			return -ENOENT;
+		}
 	} else {
 		struct conf_list list;
 		struct conf_list_node node;
@@ -424,8 +426,10 @@ int nfs4_init_name_mapping(char *conffile)
 	gss_methods = conf_get_list("Translation", "GSS-Methods");
 	if (gss_methods) {
 		IDMAP_LOG(1, ("libnfsidmap: processing 'GSS-Methods' list"));
-		if (load_plugins(gss_methods, &gss_plugins) == -1)
+		if (load_plugins(gss_methods, &gss_plugins) == -1) {
+			conf_free_list(gss_methods);
 			goto out;
+		}
 	}
 
 	nobody_user = conf_get_str("Mapping", "Nobody-User");
